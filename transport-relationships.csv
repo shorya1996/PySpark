@@ -1,0 +1,16 @@
+src,dst,relationship,cost
+Amsterdam,Utrecht,BUS,46
+Amsterdam,Den Haag,BUS,59
+Den Haag,Rotterdam,BUS,26
+Amsterdam,Immingham,TAXI,369
+Immingham,Doncaster,BUS,74
+Doncaster,London,TAXI,277
+Hoek van Holland,Den Haag,BUS,27
+Felixstowe,Hoek van Holland,TAXI,207
+Ipswich,Felixstowe,BUS,22
+Colchester,Ipswich,BUS,32
+London,Colchester,TAXI,106
+Gouda,Rotterdam,BUS,25
+Gouda,Utrecht,BUS,35
+Den Haag,Gouda,BUS,32
+Hoek van Holland,Rotterdam,BUS,33
