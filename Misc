@@ -1,0 +1,77 @@
+from pyspark.sql.functions import udf, lit
+
+from pyspark.sql.types import StringType, ArrayType, DoubleType import ast
+
+def generate_rules (dt_as_json, df, f_index_to_name_dict, operators):
+
+dt_as_json_str = str(dt_as_json) cond_parsing_exception occured = False
+
+df = df.withColumn('features'+'_list',
+
+udf(lambda x: x.toArray().tolist(), ArrayType (DoubleType()))
+
+(df ['features'])
+
+)
+
+#step 3: parse and check whether current instance follows condition in perticular node def parse_validate_cond (cond: str, f_vector: list):
+
+cond parts = cond.split()
+
+condition_f_index = int(cond_parts [1])
+
+condition_op = cond_parts [2]
+
+condition_value = float(cond_parts [3])
+
+f_value = f_vector [condition_f_index]
+
+f_name = f_index_to_name_dict[condition_f_index].replace('numerical_features_','').replace('encoded_numeric__',
+
+**). Lower()
+
+if operators[condition_op] (f_value, condition_value): return True, f_name + ' ' + condition_op + ' ' + str(round(condition_value,2))
+
+return False, "
+
+
+# Step 4 : extract rules for an instance in a dataframe, going through nodes in a tree where instance is satisfying the
+
+rule, finally leading to a prediction hode
+
+def extract_rule(dt_as_json_str: str, f_vector: list, rule="
+
+#variante declared in muter function is read only #2 inner if not explicitly declared to be nonfocal
+
+nonlocal cond_parsing_exception occured
+
+dt_as_json = ast. literal eval(dt_as_json_str) child_l = dt_as_json['children']
+
+for child in child_t: name = child['name'].strip()
+
+if name.startsWith('Predict:'); remove last comm return rule [8: rute.rindex(",")]
+
+if name.startsWith("feature"):
+
+try:
+
+res, cond = parse_validate_cond(child['name'], f_vector) except Exception as e:
+
+res = False
+
+cond_parsing_exception occured = True
+
+if res:
+
+rule cond rule = extract_rule(str(child), f_vector, rule=rule)
+
+return rule
+
+df = df.withColumn('role',
+
+udf(lambda dt, fv:extract_ruleidt, fv),StringType())) (lit(dt_as_json_str), dfl'features+_list"!)
+
+
+#log exception occured while trying to parse #condition in decision tree node if cond_parsing_exception occured: print('some node in decision tree has unexpected format)
+
+return df
