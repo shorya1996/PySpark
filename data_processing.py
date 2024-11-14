@@ -10,10 +10,25 @@ def load_data(file_path):
 
 def handle_missing_values(df, threshold=0.5):
     """Remove columns with a high proportion of missing values and handle remaining nulls."""
+    # Calculate the threshold for dropping columns
+    cols_before = df.shape[1]
+    drop_cols = df.columns[df.isnull().mean() > threshold]
+
+    # Print the columns being dropped
+    if len(drop_cols) > 0:
+        print(f"Dropping columns due to high missing values: {list(drop_cols)}")
+    else:
+        print("No columns dropped due to missing values.")
+
     # Drop columns with more than `threshold` proportion of null values
-    df = df.dropna(axis=1, thresh=int((1 - threshold) * len(df)))
+    df.drop(columns=drop_cols, inplace=True)
+
     # Drop rows with any remaining null values
+    rows_before = df.shape[0]
     df.dropna(inplace=True)
+    rows_after = df.shape[0]
+
+    print(f"Rows dropped due to null values: {rows_before - rows_after}")
     return df
 
 def preprocess_data(data, target_column):
