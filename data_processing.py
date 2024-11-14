@@ -1,32 +1,23 @@
+# src/preprocess.py
 import pandas as pd
 import numpy as np
 
-def load_data(file_path, target_col):
-    """Load data from a CSV file."""
-    try:
-        data = pd.read_csv(file_path)
-        print(f"Loaded data with shape: {data.shape}")
-        return data
-    except FileNotFoundError:
-        print(f"Error: File {file_path} not found.")
-        return None
+def load_data(file_path):
+    """Load the dataset from the CSV file."""
+    data = pd.read_csv(file_path)
+    data.replace("none", np.NaN, inplace=True)
+    return data
 
-def preprocess_data(df, target_col, drop_threshold=0.5):
-    """Preprocess the dataset by handling null values and encoding."""
-    # Replace placeholder 'none' values with NaN
-    df.replace("none", np.NaN, inplace=True)
-
-    # Drop columns with a high percentage of null values
-    null_percentage = df.isnull().mean()
-    cols_to_drop = null_percentage[null_percentage > drop_threshold].index
-    df.drop(columns=cols_to_drop, inplace=True)
-    print(f"Dropped columns with > {drop_threshold*100}% null values: {list(cols_to_drop)}")
-
+def handle_missing_values(df, threshold=0.5):
+    """Remove columns with a high proportion of missing values and handle remaining nulls."""
+    # Drop columns with more than `threshold` proportion of null values
+    df = df.dropna(axis=1, thresh=int((1 - threshold) * len(df)))
     # Drop rows with any remaining null values
     df.dropna(inplace=True)
-    print(f"Shape after dropping rows with nulls: {df.shape}")
+    return df
 
-    # Split into features and target
-    y = df[target_col].apply(lambda x: 0 if x == 'good' else 1)
-    X = df.drop(target_col, axis=1)
+def preprocess_data(data, target_column):
+    """Prepare the dataset for model training."""
+    y = data[target_column].apply(lambda x: 0 if x == 'good' else 1)
+    X = data.drop(columns=[target_column])
     return X, y
