@@ -51,20 +51,22 @@ class TestRuleFit(unittest.TestCase):
             return None
         mock_rf.fit = MagicMock(side_effect=mock_fit)  # Mock fit with side effect
 
-        # Run the main function and expect it to handle errors
+        # Run the main function
+        print("Running main function...")
         try:
             main()  # Call the main pipeline
         except Exception as e:
             print(f"Exception caught in main: {e}")  # Catch and print any error
         
-        # Ensure the fit() method was called
+        # Check if the fit method was called
         print(f"fit called: {mock_rf.fit.call_count}")  # Debug output for fit call
-
-        # Verify if fit was called once
-        self.assertEqual(mock_rf.fit.call_count, 1)
+        
+        # Assert that fit() was called once
+        self.assertEqual(mock_rf.fit.call_count, 1, f"Expected 'fit' to be called once, but was called {mock_rf.fit.call_count} times")
 
         # Verify that the logger logged the error message
         mock_logger.error.assert_called_with("An error occurred: Model fitting failed")
+
 
 if __name__ == "__main__":
     unittest.main()
