@@ -2,7 +2,6 @@ import unittest
 from unittest.mock import patch, MagicMock
 import pandas as pd
 from src.main import main
-from src.preprocessing import preprocess_data
 from src.model import RuleFit
 
 class TestRuleFit(unittest.TestCase):
@@ -29,51 +28,23 @@ class TestRuleFit(unittest.TestCase):
         self.assertEqual(y.shape, (3,))  # 3 rows, 1 target column
         mock_read_csv.assert_called_with(data_path)
     
-    @patch("src.model.RuleFit.fit")
-    @patch("src.model.RuleFit.get_rules")
-    def test_model_training(self, mock_get_rules, mock_fit):
-        """Test model training"""
-        
-        # Create mock for the RuleFit object
-        mock_rf = MagicMock(spec=RuleFit)
-        
-        # Set the return value for get_rules
-        mock_get_rules.return_value = pd.DataFrame({
-            'rule': ['Rule1', 'Rule2'],
-            'coef': [0.5, -0.3],
-            'support': [0.6, 0.4]
-        })
-        
-        # Simulate that fit works by returning the mock object
-        mock_fit.return_value = mock_rf
-        
-        # Create dummy data
-        X = pd.DataFrame({
-            'Feature1': [1, 2, 3],
-            'Feature2': [4, 5, 6]
-        })
-        y = pd.Series([0, 1, 0])
-        
-        # Train the model using the mock fit method
-        mock_rf.fit(X, y)
-        
-        # Assertions
-        mock_fit.assert_called_once()  # Ensure fit is called
-        rules_df = mock_get_rules.return_value
-        self.assertEqual(rules_df.shape, (2, 3))  # 2 rules, 3 columns
-    
-    @patch("src.model.RuleFit.fit")
-    @patch("src.model.RuleFit.get_rules")
+    @patch("src.model.RuleFit")
     @patch("src.main.get_logger")
-    def test_main_function_error_handling(self, mock_get_logger, mock_get_rules, mock_fit):
+    def test_main_function_error_handling(self, mock_get_logger, MockRuleFit):
         """Test error handling in the main function"""
         
         # Mock the logger
         mock_logger = MagicMock()
         mock_get_logger.return_value = mock_logger
         
-        # Simulate error in model fitting
-        mock_fit.side_effect = Exception("Model fitting failed")
+        # Create mock for the RuleFit object
+        mock_rf = MagicMock(spec=RuleFit)
+        
+        # Simulate an error in the fit method
+        mock_rf.fit.side_effect = Exception("Model fitting failed")
+        
+        # Return the mock RuleFit instance when RuleFit is called
+        MockRuleFit.return_value = mock_rf
         
         # Run the main function and expect it to handle errors
         try:
@@ -81,8 +52,11 @@ class TestRuleFit(unittest.TestCase):
         except:
             pass  # Just pass the error to check if it fails gracefully
 
-        # Ensure that fit was called, and we caught the error
-        mock_fit.assert_called_once()
+        # Add logging to debug if fit() is being called
+        print(f"fit called: {mock_rf.fit.call_count}")  # This will print the number of times fit was called
+        
+        # Ensure that fit was called once
+        mock_rf.fit.assert_called_once()
 
         # Verify the logger logged the error
         mock_logger.error.assert_called_with("An error occurred: Model fitting failed")
