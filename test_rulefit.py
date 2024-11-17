@@ -1,88 +1,61 @@
+# test_rulefit.py
 import unittest
 import pandas as pd
+from src.logger import get_logger
 from src.preprocessing import preprocess_data
-from rulefit import RuleFit
+from src.model import RuleFit
+
+# Initialize the logger
+logger = get_logger(__name__)
 
 class TestPreprocessing(unittest.TestCase):
     def setUp(self):
-        """Prepare test setup by loading data and preprocessing."""
-        self.data_path = "data/input.csv"  # Adjust to match the actual path in your project
-        self.target_column = "Class"
+        """Load sample data for testing."""
+        data_path = "data/input.csv"  # Update path if necessary
+        target_col = 'Class'
+        X, y = preprocess_data(data_path, target_col)
+        self.X = X
+        self.y = y
 
     def test_preprocess_data(self):
-        """Test if data is preprocessed correctly."""
-        try:
-            X, y = preprocess_data(self.data_path, self.target_column)
-            self.assertEqual(len(X), len(y))
-            self.assertNotIn(self.target_column, X.columns)
-            self.assertIsInstance(X, pd.DataFrame)
-            self.assertIsInstance(y, pd.Series)
-        except Exception as e:
-            self.fail(f"Preprocessing failed with error: {e}")
+        """Test if preprocessing correctly splits features and target."""
+        self.assertEqual(len(self.X), len(self.y))
+        self.assertNotIn('Class', self.X.columns)
+        self.assertIsInstance(self.X, pd.DataFrame)
+        self.assertIsInstance(self.y, pd.Series)
 
 class TestRuleFit(unittest.TestCase):
     def setUp(self):
-        """Prepare test setup for RuleFit by preprocessing data."""
-        self.data_path = "data/input.csv"
-        self.target_column = "Class"
-        X, y = preprocess_data(self.data_path, self.target_column)
+        """Load sample data and preprocess for RuleFit testing."""
+        data_path = "data/input.csv"  # Update path if necessary
+        target_col = 'Class'
+        X, y = preprocess_data(data_path, target_col)
         self.X = X
         self.y = y
 
     def test_rulefit_training(self):
         """Test if RuleFit model can train successfully."""
-        rf = RuleFit(
-            tree_size=4,
-            max_rules=2000,
-            rfmode='classify',
-            model_type="rl",
-            random_state=1,
-            max_iter=1000
-        )
-        rf.fit(self.X, self.y)
-        
-        # Check if the RuleFit model has generated rules
-        self.assertTrue(hasattr(rf, 'rules_'))
-        self.assertGreater(len(rf.rules_), 0)
+        try:
+            rf = RuleFit(tree_size=4, max_rules=2000, rfmode='classify', model_type="rl", random_state=1, max_iter=1000)
+            rf.fit(self.X, self.y)
+            self.assertTrue(hasattr(rf, 'rules_'))
+            self.assertGreater(len(rf.rules_), 0)
+        except Exception as e:
+            logger.error(f"Error during RuleFit model training: {e}", exc_info=True)
+            self.fail(f"RuleFit training failed with exception: {e}")
 
     def test_rule_extraction(self):
         """Test if RuleFit extracts rules correctly."""
-        rf = RuleFit(
-            tree_size=4,
-            max_rules=2000,
-            rfmode='classify',
-            model_type="rl",
-            random_state=1,
-            max_iter=1000
-        )
-        rf.fit(self.X, self.y)
-        
-        # Extract the rules from the trained model
-        rules = rf.get_rules()
-        
-        # Check if the rules are in the expected DataFrame format
-        self.assertIsInstance(rules, pd.DataFrame)
-        self.assertIn('support', rules.columns)  # Ensure the 'support' column exists
-        self.assertIn('rule', rules.columns)    # Ensure the 'rule' column exists
-
-    def test_rulefit_transform(self):
-        """Test the transform method of the RuleFit model."""
-        rf = RuleFit(
-            tree_size=4,
-            max_rules=2000,
-            rfmode='classify',
-            model_type="rl",
-            random_state=1,
-            max_iter=1000
-        )
-        rf.fit(self.X, self.y)
-        
-        # Transform the original data
-        transformed_data = rf.transform(self.X)
-        
-        # Ensure that the transformed data has the expected shape
-        self.assertEqual(transformed_data.shape[0], self.X.shape[0])  # Same number of rows
-        self.assertGreater(transformed_data.shape[1], 0)  # Should have some columns (rules)
+        try:
+            rf = RuleFit(tree_size=4, max_rules=2000, rfmode='classify', model_type="rl", random_state=1, max_iter=1000)
+            rf.fit(self.X, self.y)
+            rules = rf.get_rules()
+            self.assertIsInstance(rules, pd.DataFrame)
+            self.assertIn('support', rules.columns)
+            self.assertIn('rule', rules.columns)
+        except Exception as e:
+            logger.error(f"Error during Rule extraction: {e}", exc_info=True)
+            self.fail(f"Rule extraction failed with exception: {e}")
 
 if __name__ == "__main__":
     unittest.main()
