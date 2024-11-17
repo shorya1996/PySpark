@@ -1,3 +1,4 @@
+# src/logger.py
 import logging
 import uuid
 import os
@@ -17,7 +18,7 @@ def get_logger(name):
         os.makedirs('logs', exist_ok=True)
         
         # Create a global logger that will be used by all modules
-        logger = logging.getLogger('global_logger')
+        logger = logging.getLogger()  # Root logger
         logger.setLevel(logging.DEBUG)  # Set log level to DEBUG to capture all logs
 
         # Create a file handler to write logs to the file
@@ -32,12 +33,15 @@ def get_logger(name):
         logger.addHandler(file_handler)
 
         # Debugging: Confirm the logger initialization and file handler
-        print(f"Logger initialized with log file: {log_filename}")
         logger.debug(f"Logger initialized with log file: {log_filename}")
 
         # Store the log ID for reference in the log file name
         logger.log_id = log_id
 
-    # Return the logger specific to the module that calls this function
+    # Get a logger for the specific module, sharing the same file handler
     module_logger = logging.getLogger(name)
+
+    # Ensure the module logger propagates its logs to the global logger
+    module_logger.propagate = True
+    
     return module_logger
