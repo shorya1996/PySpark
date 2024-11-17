@@ -32,8 +32,7 @@ class TestPipeline(unittest.TestCase):
         self.assertTrue('Feature1' in X.columns)
         self.assertTrue('Feature2' in X.columns)
         self.assertEqual(list(y), [0, 1, 0, 1, 0])
-
-@patch('src.main.preprocess_data')  # Ensure correct path for preprocess_data
+    @patch('src.main.preprocess_data')  # Ensure correct path for preprocess_data
 @patch('src.main.RuleFit')  # Mocking RuleFit where it's imported and used in main()
 def test_model_training(self, mock_rulefit, mock_preprocess):
     # Sample processed data for testing
