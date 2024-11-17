@@ -33,44 +33,45 @@ class TestPipeline(unittest.TestCase):
         self.assertTrue('Feature2' in X.columns)
         self.assertEqual(list(y), [0, 1, 0, 1, 0])
 
-    @patch('src.model.RuleFit')  # Correct path for RuleFit model
-    @patch('src.preprocessing.preprocess_data')  # Correct path for preprocess_data function
-    def test_model_training(self, mock_preprocess, mock_rulefit):
-        # Sample processed data for testing
-        mock_X = pd.DataFrame({'Feature1': [1, 2, 3], 'Feature2': [4, 5, 6]})
-        mock_y = pd.Series([0, 1, 0])
+@patch('src.main.preprocess_data')  # Ensure correct path for preprocess_data
+@patch('src.main.RuleFit')  # Mocking RuleFit where it's imported and used in main()
+def test_model_training(self, mock_rulefit, mock_preprocess):
+    # Sample processed data for testing
+    mock_X = pd.DataFrame({'Feature1': [1, 2, 3], 'Feature2': [4, 5, 6]})
+    mock_y = pd.Series([0, 1, 0])
 
-        # Mock preprocess_data to return sample data
-        mock_preprocess.return_value = (mock_X, mock_y)
+    # Mock preprocess_data to return sample data
+    mock_preprocess.return_value = (mock_X, mock_y)
 
-        # Mock RuleFit instance
-        mock_rf = MagicMock()
-        mock_rulefit.return_value = mock_rf
+    # Mock RuleFit instance
+    mock_rf = MagicMock()
+    mock_rulefit.return_value = mock_rf
 
-        # Call the main function (the one we want to test)
-        with patch('src.logger.get_logger') as mock_logger:
-            mock_logger.return_value = logging.getLogger()
+    # Call the main function (the one we want to test)
+    with patch('src.logger.get_logger') as mock_logger:
+        mock_logger.return_value = logging.getLogger()
 
-            main()  # Run the pipeline
+        main()  # Run the pipeline
 
-            # Check if preprocess_data was called with correct arguments
-            mock_preprocess.assert_called_once_with('data/input.csv', 'Class')
+        # Check if preprocess_data was called with correct arguments
+        mock_preprocess.assert_called_once_with('data/input.csv', 'Class')
 
-            # Check if RuleFit was initialized with the correct arguments
-            mock_rulefit.assert_called_once_with(
-                tree_size=4,
-                max_rules=2000,
-                rfmode='classify',
-                model_type='rl',
-                random_state=1,
-                max_iter=1000
-            )
+        # Check if RuleFit was initialized with the correct arguments
+        mock_rulefit.assert_called_once_with(
+            tree_size=4,
+            max_rules=2000,
+            rfmode='classify',
+            model_type='rl',
+            random_state=1,
+            max_iter=1000
+        )
 
-            # Check if fit was called on RuleFit instance with the correct data
-            mock_rf.fit.assert_called_once_with(mock_X, mock_y, feature_names=['Feature1', 'Feature2'])
+        # Check if fit was called on RuleFit instance with the correct data
+        mock_rf.fit.assert_called_once_with(mock_X, mock_y, feature_names=['Feature1', 'Feature2'])
 
-            # Check if get_rules was called on RuleFit
-            mock_rf.get_rules.assert_called_once()
+        # Check if get_rules was called on RuleFit
+        mock_rf.get_rules.assert_called_once()
+
 
     @patch('src.logger.get_logger')  # Mocking the logger
     @patch('src.model.RuleFit')  # Mocking RuleFit
