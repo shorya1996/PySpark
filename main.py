@@ -13,6 +13,7 @@ def main():
         X, y = preprocess_data(data_path, target_col)
         logger.info("Data preprocessing completed successfully")
         rf = RuleFit(tree_size=4, max_rule=2000, rfmode='classify', model_type="rl", randome_state=1, max_iter=1000)
+        rf.fit(X,y,feature_names=X.columns)
         rules=rf.get_rules()
         print(rules)
         logger.info("Model training completed successfully")
