@@ -1,56 +1,92 @@
 import unittest
 from unittest.mock import patch, MagicMock
-from main import main
+import pandas as pd
+from src.main import main
+from src.preprocessing import preprocess_data
+from src.model import RuleFit
+import logging
 
-class TestMain(unittest.TestCase):
 
-    @patch("src.logger.get_logger")
-    @patch("src.preprocessing.preprocess_data")
-    @patch("src.model.RuleFit")
-    def test_main_success(self, MockRuleFit, mock_preprocess_data, mock_get_logger):
-        # Mocking logger
-        mock_logger = MagicMock()
-        mock_get_logger.return_value = mock_logger
+class TestPipeline(unittest.TestCase):
 
-        # Mocking preprocess_data return value
-        mock_preprocess_data.return_value = (MagicMock(), MagicMock())
+    @patch('src.preprocessing.pd.read_csv')
+    def test_data_preprocessing(self, mock_read_csv):
+        # Sample data for mocking read_csv
+        mock_data = pd.DataFrame({
+            'Feature1': [1, 2, 3, 4, 5],
+            'Feature2': [6, 7, 8, 9, 10],
+            'Class': [0, 1, 0, 1, 0]
+        })
 
-        # Mock RuleFit
-        mock_rf_instance = MagicMock()
-        MockRuleFit.return_value = mock_rf_instance
-        mock_rf_instance.fit.return_value = None
-        mock_rf_instance.get_rules.return_value = MagicMock()
+        # Mock read_csv to return sample data
+        mock_read_csv.return_value = mock_data
 
-        with patch("builtins.print") as mock_print:
-            main()
+        # Test preprocess_data function
+        data_path = "data/input.csv"
+        target_col = "Class"
+        X, y = preprocess_data(data_path, target_col)
 
-        # Assert the logger was called at the correct times
-        mock_logger.info.assert_any_call("Starting the end-to-end pipeline")
-        mock_logger.info.assert_any_call("Data preprocessing completed successfully")
-        mock_logger.info.assert_any_call("Model training completed successfully")
+        # Assertions to check if data is preprocessed correctly
+        self.assertEqual(X.shape, (5, 2))
+        self.assertEqual(y.shape, (5,))
+        self.assertTrue('Feature1' in X.columns)
+        self.assertTrue('Feature2' in X.columns)
+        self.assertEqual(list(y), [0, 1, 0, 1, 0])
 
-        # Assert that print was called for the rules
-        mock_print.assert_called_once()
+    @patch('src.model.RuleFit')
+    @patch('src.preprocessing.preprocess_data')
+    def test_model_training(self, mock_preprocess, mock_rulefit):
+        # Sample processed data for testing
+        mock_X = pd.DataFrame({'Feature1': [1, 2, 3], 'Feature2': [4, 5, 6]})
+        mock_y = pd.Series([0, 1, 0])
 
-    @patch("src.logger.get_logger")
-    @patch("src.preprocessing.preprocess_data")
-    @patch("src.model.RuleFit")
-    def test_main_failure(self, MockRuleFit, mock_preprocess_data, mock_get_logger):
-        # Mocking logger
-        mock_logger = MagicMock()
-        mock_get_logger.return_value = mock_logger
+        # Mock preprocess_data to return sample data
+        mock_preprocess.return_value = (mock_X, mock_y)
 
-        # Mocking preprocess_data to raise an exception
-        mock_preprocess_data.side_effect = Exception("Error during preprocessing")
+        # Mock RuleFit instance
+        mock_rf = MagicMock()
+        mock_rulefit.return_value = mock_rf
 
-        with patch("builtins.print") as mock_print:
-            main()
+        # Call the main function (the one we want to test)
+        with patch('src.logger.get_logger') as mock_logger:
+            mock_logger.return_value = logging.getLogger()
 
-        # Assert the error log was called
-        mock_logger.error.assert_any_call("An error occurred: Error during preprocessing")
+            main()  # Run the pipeline
 
-        # Ensure that no model fitting or rule extraction happens
-        MockRuleFit.assert_not_called()
+            # Check if preprocess_data was called
+            mock_preprocess.assert_called_once_with('data/input.csv', 'Class')
 
-if __name__ == "__main__":
+            # Check if RuleFit was initialized
+            mock_rulefit.assert_called_once_with(tree_size=4, max_rules=2000, rfmode='classify', model_type='rl', random_state=1, max_iter=1000)
+
+            # Check if fit was called on RuleFit instance
+            mock_rf.fit.assert_called_once_with(mock_X, mock_y, feature_names=['Feature1', 'Feature2'])
+
+            # Check if get_rules was called
+            mock_rf.get_rules.assert_called_once()
+
+    @patch('src.logger.get_logger')
+    @patch('src.model.RuleFit')
+    def test_pipeline_logging(self, mock_rulefit, mock_logger):
+        # Mock logging
+        mock_logger_instance = MagicMock()
+        mock_logger.return_value = mock_logger_instance
+
+        # Mock RuleFit behavior
+        mock_rf = MagicMock()
+        mock_rulefit.return_value = mock_rf
+
+        # Run the main function
+        main()
+
+        # Ensure logger.info and logger.error are called appropriately
+        mock_logger_instance.info.assert_any_call("Starting the end-to-end pipeline")
+        mock_logger_instance.info.assert_any_call("Data preprocessing completed successfully")
+        mock_logger_instance.info.assert_any_call("Model training completed successfully")
+
+        # If there is an error, it will be captured here
+        mock_logger_instance.error.assert_not_called()  # In this case, no error should occur
+
+
+if __name__ == '__main__':
     unittest.main()
