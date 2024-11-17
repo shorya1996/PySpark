@@ -6,7 +6,7 @@ from src.preprocessing import preprocess_data
 from src.model import RuleFit
 
 class TestRuleFit(unittest.TestCase):
-    
+
     @patch("src.preprocessing.pd.read_csv")
     def test_data_preprocessing(self, mock_read_csv):
         """Test data preprocessing"""
@@ -34,15 +34,17 @@ class TestRuleFit(unittest.TestCase):
     def test_model_training(self, mock_get_rules, mock_fit):
         """Test model training"""
         
-        # Mock the RuleFit model
+        # Create mock for the RuleFit object
         mock_rf = MagicMock(spec=RuleFit)
-        mock_rf.get_rules.return_value = pd.DataFrame({
+        
+        # Set the return value for get_rules
+        mock_get_rules.return_value = pd.DataFrame({
             'rule': ['Rule1', 'Rule2'],
             'coef': [0.5, -0.3],
             'support': [0.6, 0.4]
         })
         
-        # Mock fit method
+        # Simulate that fit works by returning the mock object
         mock_fit.return_value = mock_rf
         
         # Create dummy data
@@ -52,7 +54,7 @@ class TestRuleFit(unittest.TestCase):
         })
         y = pd.Series([0, 1, 0])
         
-        # Train the model
+        # Train the model using the mock fit method
         mock_rf.fit(X, y)
         
         # Assertions
@@ -62,8 +64,13 @@ class TestRuleFit(unittest.TestCase):
     
     @patch("src.model.RuleFit.fit")
     @patch("src.model.RuleFit.get_rules")
-    def test_main_function_error_handling(self, mock_get_rules, mock_fit):
+    @patch("src.main.get_logger")
+    def test_main_function_error_handling(self, mock_get_logger, mock_get_rules, mock_fit):
         """Test error handling in the main function"""
+        
+        # Mock the logger
+        mock_logger = MagicMock()
+        mock_get_logger.return_value = mock_logger
         
         # Simulate error in model fitting
         mock_fit.side_effect = Exception("Model fitting failed")
@@ -76,6 +83,9 @@ class TestRuleFit(unittest.TestCase):
 
         # Ensure that fit was called, and we caught the error
         mock_fit.assert_called_once()
+
+        # Verify the logger logged the error
+        mock_logger.error.assert_called_with("An error occurred: Model fitting failed")
 
 if __name__ == "__main__":
     unittest.main()
