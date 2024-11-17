@@ -3,6 +3,8 @@ from unittest.mock import patch, MagicMock
 import pandas as pd
 from src.main import main
 from src.model import RuleFit
+from src.preprocessing import preprocess_data
+
 
 class TestRuleFit(unittest.TestCase):
 
@@ -27,38 +29,41 @@ class TestRuleFit(unittest.TestCase):
         self.assertEqual(X.shape, (3, 2))  # 3 rows, 2 features
         self.assertEqual(y.shape, (3,))  # 3 rows, 1 target column
         mock_read_csv.assert_called_with(data_path)
-    
+
     @patch("src.model.RuleFit")
     @patch("src.main.get_logger")
     def test_main_function_error_handling(self, mock_get_logger, MockRuleFit):
         """Test error handling in the main function"""
-        
+
         # Mock the logger
         mock_logger = MagicMock()
         mock_get_logger.return_value = mock_logger
-        
+
         # Create mock for the RuleFit object
         mock_rf = MagicMock(spec=RuleFit)
-        
-        # Simulate an error in the fit method
-        mock_rf.fit.side_effect = Exception("Model fitting failed")
-        
-        # Return the mock RuleFit instance when RuleFit is called
+
+        # Simulate that RuleFit is being called
         MockRuleFit.return_value = mock_rf
-        
+
+        # Add a print statement in the mock to track when fit is called
+        def mock_fit(*args, **kwargs):
+            print("fit method called!")
+            return None
+        mock_rf.fit = mock_fit
+
         # Run the main function and expect it to handle errors
         try:
             main()  # Call the main pipeline
-        except:
-            pass  # Just pass the error to check if it fails gracefully
-
-        # Add logging to debug if fit() is being called
-        print(f"fit called: {mock_rf.fit.call_count}")  # This will print the number of times fit was called
+        except Exception as e:
+            print(f"Exception caught in main: {e}")  # Catch and print any error
         
-        # Ensure that fit was called once
-        mock_rf.fit.assert_called_once()
+        # Ensure the fit() method was called
+        print(f"fit called: {mock_rf.fit.call_count}")  # Debug output for fit call
 
-        # Verify the logger logged the error
+        # Verify if fit was called once
+        self.assertEqual(mock_rf.fit.call_count, 1)
+
+        # Verify that the logger logged the error message
         mock_logger.error.assert_called_with("An error occurred: Model fitting failed")
 
 if __name__ == "__main__":
