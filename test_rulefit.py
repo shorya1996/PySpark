@@ -49,7 +49,7 @@ class TestRuleFit(unittest.TestCase):
         def mock_fit(*args, **kwargs):
             print("fit method called!")
             return None
-        mock_rf.fit = mock_fit
+        mock_rf.fit = MagicMock(side_effect=mock_fit)  # Mock fit with side effect
 
         # Run the main function and expect it to handle errors
         try:
