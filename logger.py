@@ -3,22 +3,24 @@ import logging
 import uuid
 import os
 
+# Create a logger instance variable that will hold the logger
+logger = None
+
 def get_logger(name):
-    """Creates a logger that writes to a unique log file generated using uuid."""
-    
-    # Generate a random UUID for the log file name
-    log_id = str(uuid.uuid4())  # Generate a unique log ID
-    log_filename = f'logs/project_{log_id}.log'  # Use uuid for log file name
-    
-    # Ensure the logs directory exists
-    os.makedirs('logs', exist_ok=True)
-    
-    # Create a logger
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.INFO)  # Or any log level you prefer
-    
-    # Check if the logger already has handlers, if not, add a new one
-    if not logger.handlers:
+    """Create or get the global logger instance."""
+    global logger
+    if logger is None:
+        # Generate a random UUID for the log file name
+        log_id = str(uuid.uuid4())  # Generate a unique log ID
+        log_filename = f'logs/project_{log_id}.log'  # Use uuid for log file name
+        
+        # Ensure the logs directory exists
+        os.makedirs('logs', exist_ok=True)
+        
+        # Create a logger
+        logger = logging.getLogger(name)
+        logger.setLevel(logging.INFO)  # Or any log level you prefer
+
         # Create file handler to log to a file
         file_handler = logging.FileHandler(log_filename)  # Unique log file
         file_handler.setLevel(logging.INFO)
@@ -29,8 +31,8 @@ def get_logger(name):
 
         # Add the handler to the logger
         logger.addHandler(file_handler)
+        
+        # Adding the log ID to logger so it can be accessed
+        logger.log_id = log_id
 
-    # Adding the log ID to logger so it can be accessed
-    logger.log_id = log_id
-    
     return logger
