@@ -9,7 +9,7 @@ import logging
 
 class TestPipeline(unittest.TestCase):
 
-    @patch('src.preprocessing.pd.read_csv')
+    @patch('src.preprocessing.pd.read_csv')  # Correctly patching the import path
     def test_data_preprocessing(self, mock_read_csv):
         # Sample data for mocking read_csv
         mock_data = pd.DataFrame({
@@ -33,8 +33,8 @@ class TestPipeline(unittest.TestCase):
         self.assertTrue('Feature2' in X.columns)
         self.assertEqual(list(y), [0, 1, 0, 1, 0])
 
-    @patch('src.model.RuleFit')
-    @patch('src.preprocessing.preprocess_data')
+    @patch('src.model.RuleFit')  # Correct path for RuleFit model
+    @patch('src.preprocessing.preprocess_data')  # Correct path for preprocess_data function
     def test_model_training(self, mock_preprocess, mock_rulefit):
         # Sample processed data for testing
         mock_X = pd.DataFrame({'Feature1': [1, 2, 3], 'Feature2': [4, 5, 6]})
@@ -53,20 +53,27 @@ class TestPipeline(unittest.TestCase):
 
             main()  # Run the pipeline
 
-            # Check if preprocess_data was called
+            # Check if preprocess_data was called with correct arguments
             mock_preprocess.assert_called_once_with('data/input.csv', 'Class')
 
-            # Check if RuleFit was initialized
-            mock_rulefit.assert_called_once_with(tree_size=4, max_rules=2000, rfmode='classify', model_type='rl', random_state=1, max_iter=1000)
+            # Check if RuleFit was initialized with the correct arguments
+            mock_rulefit.assert_called_once_with(
+                tree_size=4,
+                max_rules=2000,
+                rfmode='classify',
+                model_type='rl',
+                random_state=1,
+                max_iter=1000
+            )
 
-            # Check if fit was called on RuleFit instance
+            # Check if fit was called on RuleFit instance with the correct data
             mock_rf.fit.assert_called_once_with(mock_X, mock_y, feature_names=['Feature1', 'Feature2'])
 
-            # Check if get_rules was called
+            # Check if get_rules was called on RuleFit
             mock_rf.get_rules.assert_called_once()
 
-    @patch('src.logger.get_logger')
-    @patch('src.model.RuleFit')
+    @patch('src.logger.get_logger')  # Mocking the logger
+    @patch('src.model.RuleFit')  # Mocking RuleFit
     def test_pipeline_logging(self, mock_rulefit, mock_logger):
         # Mock logging
         mock_logger_instance = MagicMock()
@@ -84,7 +91,7 @@ class TestPipeline(unittest.TestCase):
         mock_logger_instance.info.assert_any_call("Data preprocessing completed successfully")
         mock_logger_instance.info.assert_any_call("Model training completed successfully")
 
-        # If there is an error, it will be captured here
+        # Check that no errors are logged if everything runs fine
         mock_logger_instance.error.assert_not_called()  # In this case, no error should occur
 
 
