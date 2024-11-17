@@ -1,50 +1,56 @@
-@patch('src.rulefit.RuleFit')
-@patch('src.preprocess.preprocess_data')
-def test_model_training(self, mock_preprocess, mock_rulefit):
-    # Sample processed data for testing
-    mock_X = pd.DataFrame({'Feature1': [1, 2, 3], 'Feature2': [4, 5, 6]})
-    mock_y = pd.Series([0, 1, 0])
+import unittest
+import pandas as pd
+from src.preprocess import preprocess_data
+from src.rulefit import RuleFit
 
-    # Mock preprocess_data to return sample data
-    mock_preprocess.return_value = (mock_X, mock_y)
+class TestPipeline(unittest.TestCase):
 
-    # Mock RuleFit instance
-    mock_rf = MagicMock()
-    mock_rulefit.return_value = mock_rf
+    def test_preprocess_data(self):
+        # Test if data is loaded and preprocessed correctly
+        file_path = 'data/sample_data.csv'
+        X, y = preprocess_data(file_path, 'Class')
+        
+        # Check if X and y are not None
+        self.assertIsNotNone(X)
+        self.assertIsNotNone(y)
 
-    # Mock the behavior of get_rules().sort_values()
-    mock_rules_df = pd.DataFrame({
-        'rule': ['rule1', 'rule2'],
-        'coefficient': [0.5, -0.2],
-        'support': [100, 200],
-        'importance': [0.8, 0.4]
-    })
-    mock_rf.get_rules.return_value = mock_rules_df
-    mock_rf.get_rules.return_value.sort_values.return_value = mock_rules_df
+        # Check if the data has the expected shape
+        self.assertEqual(X.shape[1], 2)  # Should have 2 features
+        self.assertEqual(len(y), 5)      # Should have 5 rows in target
 
-    # Call the main function
-    with patch('src.logger.get_logger') as mock_logger:
-        mock_logger.return_value = logging.getLogger()
-        main()
+    def test_model_training(self):
+        # Load the preprocessed data
+        file_path = 'data/sample_data.csv'
+        X, y = preprocess_data(file_path, 'Class')
 
-    # Check if preprocess_data was called with correct arguments
-    mock_preprocess.assert_called_once_with('data/input.csv', 'Class')
+        # Initialize and train RuleFit model
+        model = RuleFit(tree_size=4, max_rules=2000, rfmode='classify',
+                        model_type='rl', random_state=1, max_iter=1000)
+        model.fit(X, y, feature_names=X.columns.tolist())
 
-    # Check if RuleFit was initialized with the correct arguments
-    mock_rulefit.assert_called_once_with(
-        tree_size=4,
-        max_rules=2000,
-        rfmode='classify',
-        model_type='rl',
-        random_state=1,
-        max_iter=1000
-    )
+        # Check if the model has been fitted
+        self.assertTrue(hasattr(model, 'rules_'))
+        self.assertGreater(len(model.rules_), 0)
 
-    # Check if fit was called on RuleFit instance with the correct data
-    mock_rf.fit.assert_called_once_with(mock_X, mock_y, feature_names=['Feature1', 'Feature2'])
+    def test_extract_rules(self):
+        # Load the preprocessed data
+        file_path = 'data/sample_data.csv'
+        X, y = preprocess_data(file_path, 'Class')
 
-    # Check if get_rules was called
-    mock_rf.get_rules.assert_called_once()
+        # Train the model
+        model = RuleFit(tree_size=4, max_rules=2000, rfmode='classify',
+                        model_type='rl', random_state=1, max_iter=1000)
+        model.fit(X, y, feature_names=X.columns.tolist())
 
-    # Check if sort_values was called on the DataFrame returned by get_rules
-    mock_rf.get_rules.return_value.sort_values.assert_called_once()
+        # Extract rules and check if they are not empty
+        rules_df = model.get_rules()
+        self.assertIsInstance(rules_df, pd.DataFrame)
+        self.assertGreater(len(rules_df), 0)
+
+        # Check if the DataFrame contains expected columns
+        self.assertIn('rule', rules_df.columns)
+        self.assertIn('coefficient', rules_df.columns)
+        self.assertIn('support', rules_df.columns)
+
+if __name__ == '__main__':
+    unittest.main()
