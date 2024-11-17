@@ -1,4 +1,3 @@
-# src/logger.py
 import logging
 import uuid
 import os
@@ -31,6 +30,10 @@ def get_logger(name):
 
         # Add the file handler to the logger
         logger.addHandler(file_handler)
+        
+        # Debugging: Print log ID and file handler setup confirmation
+        print(f"Logger initialized with log file: {log_filename}")
+        logger.debug(f"Logger initialized with log file: {log_filename}")
 
         # Store the log ID for reference in the log file name
         logger.log_id = log_id
