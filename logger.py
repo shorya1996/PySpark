@@ -18,11 +18,11 @@ def get_logger(name):
         
         # Create a global logger that will be used by all modules
         logger = logging.getLogger('global_logger')
-        logger.setLevel(logging.INFO)  # Set log level (INFO in this case)
+        logger.setLevel(logging.DEBUG)  # Set log level to DEBUG to capture all logs
 
         # Create a file handler to write logs to the file
         file_handler = logging.FileHandler(log_filename)
-        file_handler.setLevel(logging.INFO)
+        file_handler.setLevel(logging.DEBUG)  # Set file handler to capture DEBUG level logs
 
         # Define the format for the log entries
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -30,8 +30,8 @@ def get_logger(name):
 
         # Add the file handler to the logger
         logger.addHandler(file_handler)
-        
-        # Debugging: Print log ID and file handler setup confirmation
+
+        # Debugging: Confirm the logger initialization and file handler
         print(f"Logger initialized with log file: {log_filename}")
         logger.debug(f"Logger initialized with log file: {log_filename}")
 
