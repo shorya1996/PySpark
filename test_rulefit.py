@@ -72,7 +72,6 @@ def test_model_training(self, mock_rulefit, mock_preprocess):
         # Check if get_rules was called on RuleFit
         mock_rf.get_rules.assert_called_once()
 
-
     @patch('src.logger.get_logger')  # Mocking the logger
     @patch('src.model.RuleFit')  # Mocking RuleFit
     def test_pipeline_logging(self, mock_rulefit, mock_logger):
