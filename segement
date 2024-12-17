@@ -1,58 +1,40 @@
-CREATE TABLE customer_fraud_segments AS
-WITH 
--- Step 1: Extract the first digit from transaction amounts
-first_digit_data AS (
+-- Step 1: Compute observed distribution of first digits from transaction amounts
+WITH observed_distribution AS (
     SELECT 
         customer_id,
-        transaction_id,
-        transaction_amount,
-        CAST(SUBSTRING(CAST(transaction_amount AS STRING), 1, 1) AS INT) AS first_digit
-    FROM 
-        debit_card_transactions
-    WHERE 
-        transaction_amount > 0
-),
-
--- Step 2: Calculate observed first digit distribution for each customer
-observed_distribution AS (
-    SELECT 
-        customer_id,
-        first_digit,
+        CAST(SUBSTR(CAST(transaction_amount AS STRING), 1, 1) AS INT) AS first_digit,
         COUNT(*) AS observed_count
     FROM 
-        first_digit_data
+        transactions
+    WHERE 
+        transaction_amount > 0 -- Ensure valid positive transaction amounts
     GROUP BY 
-        customer_id, first_digit
+        customer_id, CAST(SUBSTR(CAST(transaction_amount AS STRING), 1, 1) AS INT)
 ),
+
+-- Step 2: Hardcoded expected Benford distribution
 benford_distribution AS (
-    SELECT 1 AS first_digit, 0.3010 AS expected_probability
-    UNION ALL
-    SELECT 2 AS first_digit, 0.1761 AS expected_probability
-    UNION ALL
-    SELECT 3 AS first_digit, 0.1249 AS expected_probability
-    UNION ALL
-    SELECT 4 AS first_digit, 0.0969 AS expected_probability
-    UNION ALL
-    SELECT 5 AS first_digit, 0.0792 AS expected_probability
-    UNION ALL
-    SELECT 6 AS first_digit, 0.0669 AS expected_probability
-    UNION ALL
-    SELECT 7 AS first_digit, 0.0580 AS expected_probability
-    UNION ALL
-    SELECT 8 AS first_digit, 0.0512 AS expected_probability
-    UNION ALL
+    SELECT 1 AS first_digit, 0.3010 AS expected_probability UNION ALL
+    SELECT 2 AS first_digit, 0.1761 AS expected_probability UNION ALL
+    SELECT 3 AS first_digit, 0.1249 AS expected_probability UNION ALL
+    SELECT 4 AS first_digit, 0.0969 AS expected_probability UNION ALL
+    SELECT 5 AS first_digit, 0.0792 AS expected_probability UNION ALL
+    SELECT 6 AS first_digit, 0.0669 AS expected_probability UNION ALL
+    SELECT 7 AS first_digit, 0.0580 AS expected_probability UNION ALL
+    SELECT 8 AS first_digit, 0.0512 AS expected_probability UNION ALL
     SELECT 9 AS first_digit, 0.0458 AS expected_probability
 ),
 
--- Step 4: Join observed and expected distributions and calculate chi-square for each customer
+-- Step 3: Calculate Chi-Square contributions for each customer
 chi_square_calc AS (
     SELECT 
         o.customer_id,
         o.first_digit,
         o.observed_count,
-        (o.observed_count / SUM(o.observed_count) OVER (PARTITION BY o.customer_id)) AS observed_probability,
+        (o.observed_count * 1.0 / SUM(o.observed_count) OVER (PARTITION BY o.customer_id)) AS observed_probability,
         b.expected_probability,
-        (POW((o.observed_probability - b.expected_probability), 2) / b.expected_probability) AS chi_square_contrib
+        (POW(((o.observed_count * 1.0 / SUM(o.observed_count) OVER (PARTITION BY o.customer_id)) - b.expected_probability), 2) 
+         / b.expected_probability) AS chi_square_contrib
     FROM 
         observed_distribution o
     JOIN 
@@ -61,8 +43,8 @@ chi_square_calc AS (
         o.first_digit = b.first_digit
 ),
 
--- Step 5: Summarize chi-square for each customer
-customer_chi_square AS (
+-- Step 4: Aggregate Chi-Square statistic for each customer
+chi_square_summary AS (
     SELECT 
         customer_id,
         SUM(chi_square_contrib) AS total_chi_square
@@ -72,62 +54,68 @@ customer_chi_square AS (
         customer_id
 ),
 
--- Step 6: CLT statistics with dynamic confidence intervals
-customer_stats AS (
+-- Step 5: Compute mean and standard deviation for transaction amounts per customer
+stats AS (
     SELECT 
         customer_id,
-        AVG(transaction_amount) AS avg_amount,
-        STDDEV(transaction_amount) AS stddev_amount,
-        COUNT(*) AS total_transactions,
-        -- Dynamic confidence intervals
-        AVG(transaction_amount) - 1.96 * STDDEV(transaction_amount) AS lower_ci,
-        AVG(transaction_amount) + 1.96 * STDDEV(transaction_amount) AS upper_ci,
-        SUM(CASE 
-            WHEN transaction_amount < (AVG(transaction_amount) - 1.96 * STDDEV(transaction_amount)) OR 
-                 transaction_amount > (AVG(transaction_amount) + 1.96 * STDDEV(transaction_amount))
-            THEN 1 ELSE 0 END) AS anomalous_transactions
+        AVG(transaction_amount) AS mean_transaction_amount,
+        STDDEV(transaction_amount) AS stddev_transaction_amount
     FROM 
-        debit_card_transactions
+        transactions
     GROUP BY 
         customer_id
 ),
 
--- Step 7: Combine chi-square and confidence interval results for segmentation
-final_segmentation AS (
+-- Step 6: Flag transactions as outliers based on CLT confidence intervals
+flagged_transactions AS (
     SELECT 
-        c.customer_id,
-        c.total_chi_square,
-        s.avg_amount,
-        s.stddev_amount,
-        s.total_transactions,
-        s.anomalous_transactions,
-        s.lower_ci,
-        s.upper_ci,
-        (s.anomalous_transactions * 1.0 / s.total_transactions) AS anomaly_rate,
+        t.customer_id,
+        t.transaction_id,
+        t.transaction_amount,
+        s.mean_transaction_amount,
+        s.stddev_transaction_amount,
         CASE 
-            WHEN c.total_chi_square < 5 AND (s.anomalous_transactions * 1.0 / s.total_transactions) < 0.05 THEN 'Highly Consistent'
-            WHEN c.total_chi_square BETWEEN 5 AND 10 OR (s.anomalous_transactions * 1.0 / s.total_transactions) BETWEEN 0.05 AND 0.2 THEN 'Moderately Consistent'
-            ELSE 'Inconsistent'
-        END AS segment
+            WHEN t.transaction_amount < (s.mean_transaction_amount - 1.96 * s.stddev_transaction_amount) OR 
+                 t.transaction_amount > (s.mean_transaction_amount + 1.96 * s.stddev_transaction_amount)
+            THEN 'Outlier'
+            ELSE 'Normal'
+        END AS anomaly_flag
     FROM 
-        customer_chi_square c
+        transactions t
     JOIN 
-        customer_stats s
+        stats s
     ON 
-        c.customer_id = s.customer_id
+        t.customer_id = s.customer_id
+),
+
+-- Step 7: Final profiling combining Chi-Square and CLT results
+customer_profiling AS (
+    SELECT 
+        f.customer_id,
+        f.transaction_id,
+        f.transaction_amount,
+        f.anomaly_flag,
+        c.total_chi_square,
+        CASE 
+            WHEN c.total_chi_square < 5 AND f.anomaly_flag = 'Normal' THEN 'Highly Consistent'
+            WHEN c.total_chi_square BETWEEN 5 AND 10 OR f.anomaly_flag = 'Outlier' THEN 'Moderately Consistent'
+            ELSE 'Inconsistent'
+        END AS customer_segment
+    FROM 
+        flagged_transactions f
+    JOIN 
+        chi_square_summary c
+    ON 
+        f.customer_id = c.customer_id
 )
 
--- Step 8: Create the final table
+-- Final output: Customer profiling table
 SELECT 
     customer_id,
+    transaction_id,
+    transaction_amount,
+    anomaly_flag,
     total_chi_square,
-    avg_amount,
-    stddev_amount,
-    total_transactions,
-    anomalous_transactions,
-    lower_ci,
-    upper_ci,
-    anomaly_rate,
-    segment
+    customer_segment
 FROM 
-    final_segmentation;
+    customer_profiling;
