@@ -24,20 +24,24 @@ observed_distribution AS (
     GROUP BY 
         customer_id, first_digit
 ),
-
--- Step 3: Hardcoded expected distribution based on Benford's Law
 benford_distribution AS (
-    SELECT * FROM (VALUES
-        (1, 0.3010), -- First digit 1: 30.10%
-        (2, 0.1761), -- First digit 2: 17.61%
-        (3, 0.1249), -- First digit 3: 12.49%
-        (4, 0.0969), -- First digit 4: 9.69%
-        (5, 0.0792), -- First digit 5: 7.92%
-        (6, 0.0669), -- First digit 6: 6.69%
-        (7, 0.0580), -- First digit 7: 5.80%
-        (8, 0.0512), -- First digit 8: 5.12%
-        (9, 0.0458)  -- First digit 9: 4.58%
-    ) AS t(first_digit, expected_probability)
+    SELECT 1 AS first_digit, 0.3010 AS expected_probability
+    UNION ALL
+    SELECT 2 AS first_digit, 0.1761 AS expected_probability
+    UNION ALL
+    SELECT 3 AS first_digit, 0.1249 AS expected_probability
+    UNION ALL
+    SELECT 4 AS first_digit, 0.0969 AS expected_probability
+    UNION ALL
+    SELECT 5 AS first_digit, 0.0792 AS expected_probability
+    UNION ALL
+    SELECT 6 AS first_digit, 0.0669 AS expected_probability
+    UNION ALL
+    SELECT 7 AS first_digit, 0.0580 AS expected_probability
+    UNION ALL
+    SELECT 8 AS first_digit, 0.0512 AS expected_probability
+    UNION ALL
+    SELECT 9 AS first_digit, 0.0458 AS expected_probability
 ),
 
 -- Step 4: Join observed and expected distributions and calculate chi-square for each customer
