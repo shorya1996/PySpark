@@ -1,0 +1,37 @@
+WITH RFM_Calculation AS (
+    SELECT
+        Account_Number,
+        -- Recency: Days since last transaction
+        DATEDIFF(CURRENT_DATE, MAX(Transaction_Date)) AS Recency,
+        -- Frequency: Total number of transactions
+        COUNT(*) AS Frequency,
+        -- Monetary: Total transaction amount
+        SUM(Transaction_Amount) AS Monetary
+    FROM Transactions
+    WHERE Transaction_Type = 'CNP' -- Filter for Card-Not-Present transactions
+    AND Transaction_Date >= DATE_SUB(CURRENT_DATE, 90) -- Last 90 days
+    GROUP BY Account_Number
+),
+RFM_Scoring AS (
+    SELECT
+        Account_Number,
+        -- Dynamic scoring for Recency (lower Recency is better)
+        NTILE(5) OVER (ORDER BY Recency ASC) AS Recency_Score,
+        -- Dynamic scoring for Frequency (higher Frequency is better)
+        NTILE(5) OVER (ORDER BY Frequency DESC) AS Frequency_Score,
+        -- Dynamic scoring for Monetary (higher Monetary is better)
+        NTILE(5) OVER (ORDER BY Monetary DESC) AS Monetary_Score
+    FROM RFM_Calculation
+)
+SELECT
+    Account_Number,
+    Recency_Score,
+    Frequency_Score,
+    Monetary_Score,
+    CONCAT(Recency_Score, Frequency_Score, Monetary_Score) AS RFM_Segment,
+    CASE
+        WHEN Recency_Score = 5 AND Frequency_Score = 5 AND Monetary_Score = 5 THEN 'High-Risk'
+        WHEN Recency_Score >= 3 AND Frequency_Score >= 3 AND Monetary_Score >= 3 THEN 'Medium-Risk'
+        ELSE 'Low-Risk'
+    END AS Risk_Category
+FROM RFM_Scoring;
