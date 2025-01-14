@@ -1,0 +1,43 @@
+data result;
+    set your_dataset;
+
+    /* Initialize network-specific variables for sum and count */
+    sum_visa = 0;
+    count_visa = 0;
+    sum_mastercard = 0;
+    count_mastercard = 0;
+    sum_pulse = 0;
+    count_pulse = 0;
+
+    /* Check each prior network and add corresponding score to the network-specific total */
+    if not missing(prior_network_1) and prior_network_1 = "Visa" then do;
+        sum_visa + network_score_1;
+        count_visa + 1;
+    end;
+    if not missing(prior_network_2) and prior_network_2 = "MasterCard" then do;
+        sum_mastercard + network_score_2;
+        count_mastercard + 1;
+    end;
+    if not missing(prior_network_3) and prior_network_3 = "Pulse" then do;
+        sum_pulse + network_score_3;
+        count_pulse + 1;
+    end;
+    if not missing(prior_network_4) and prior_network_4 = "Visa" then do;
+        sum_visa + network_score_4;
+        count_visa + 1;
+    end;
+    if not missing(prior_network_5) and prior_network_5 = "MasterCard" then do;
+        sum_mastercard + network_score_5;
+        count_mastercard + 1;
+    end;
+
+    /* Calculate network-specific averages */
+    if count_visa > 0 then average_visa = sum_visa / count_visa;
+    else average_visa = .;
+
+    if count_mastercard > 0 then average_mastercard = sum_mastercard / count_mastercard;
+    else average_mastercard = .;
+
+    if count_pulse > 0 then average_pulse = sum_pulse / count_pulse;
+    else average_pulse = .;
+run;
