@@ -1,0 +1,87 @@
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import (
+    col, collect_list, count, sum, max, unix_timestamp, when
+)
+from pyspark.sql.window import Window
+from pyspark.ml.fpm import FPGrowth
+
+# Initialize Spark Session
+spark = SparkSession.builder \
+    .appName("Market Basket Analysis for Fraud Detection") \
+    .config("spark.sql.catalogImplementation", "hive") \
+    .enableHiveSupport() \
+    .getOrCreate()
+
+# Step 1: Read Data from Hive
+# Replace 'database_name.table_name' with your Hive table
+cnp_data = spark.sql("SELECT * FROM database_name.table_name")
+print("Initial data:")
+cnp_data.show(5)
+
+# Step 2: Preprocessing
+# 2.1 Filter for Card-Not-Present (CNP) transactions
+cnp_data = cnp_data.filter(col("TransactionType") == "CNP").dropna(
+    subset=["MCC_Group", "AccountNumber", "TransactionTime"]
+)
+
+# 2.2 Ensure proper timestamp format
+cnp_data = cnp_data.withColumn(
+    "TransactionTime", unix_timestamp("TransactionTime").cast("timestamp")
+)
+
+# Step 3: Filter MCCs with Low Transaction Frequency
+mcc_counts = cnp_data.groupBy("MCC_Group").agg(count("*").alias("MCC_Frequency"))
+
+# Keep MCCs with >100 transactions or >5% fraud rate
+mcc_fraud_stats = cnp_data.groupBy("MCC_Group").agg(
+    count("*").alias("TotalTransactions"),
+    sum("IsFraud").alias("FraudCount")
+).withColumn("FraudRate", col("FraudCount") / col("TotalTransactions"))
+
+relevant_mccs = mcc_fraud_stats.filter(
+    (col("FraudRate") > 0.05) | (col("TotalTransactions") > 100)
+)
+
+# Filter original data to keep only relevant MCCs
+filtered_data = cnp_data.join(relevant_mccs, on="MCC_Group", how="inner")
+print("Filtered data:")
+filtered_data.show(5)
+
+# Step 4: Create Transaction Baskets
+baskets = filtered_data.groupBy("AccountNumber").agg(
+    collect_list("MCC_Group").alias("Basket"),
+    max("IsFraud").alias("HasFraud")  # 1 if any transaction is fraudulent
+)
+print("Transaction baskets:")
+baskets.show(truncate=False)
+
+# Step 5: Perform Market Basket Analysis (MBA)
+# Prepare data for FPGrowth
+fp_data = baskets.select(col("Basket").alias("items"))
+
+# Run FPGrowth
+fp_growth = FPGrowth(itemsCol="items", minSupport=0.01, minConfidence=0.5)
+model = fp_growth.fit(fp_data)
+
+# Step 6: View Results
+# Frequent Itemsets
+frequent_itemsets = model.freqItemsets
+print("Frequent itemsets:")
+frequent_itemsets.show(truncate=False)
+
+# Association Rules
+association_rules = model.associationRules
+print("Association rules:")
+association_rules.show(truncate=False)
+
+# Transform dataset using the model (optional: to predict fraud likelihood based on rules)
+predictions = model.transform(fp_data)
+print("Predictions with association rules:")
+predictions.show(truncate=False)
+
+# Step 7: Save Results Back to Hive
+baskets.write.mode("overwrite").saveAsTable("database_name.market_baskets_with_fraud")
+frequent_itemsets.write.mode("overwrite").saveAsTable("database_name.frequent_itemsets")
+association_rules.write.mode("overwrite").saveAsTable("database_name.association_rules")
+
+print("Process completed successfully!")
