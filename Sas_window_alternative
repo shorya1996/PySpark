@@ -1,0 +1,13 @@
+proc sql;
+    create table first_decline_within_30_days as
+    select acctnbr, transactionid, authorizationdteint, decisioncd
+    from main as a
+    where decisioncd = 'D'
+      and dayssinceopen < 30
+      and authorizationdtetime =
+          (select min(authorizationdtetime)
+           from main as b
+           where a.acctnbr = b.acctnbr
+             and b.decisioncd = 'D'
+             and b.dayssinceopen < 30);
+quit;
