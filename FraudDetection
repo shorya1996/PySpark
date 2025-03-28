@@ -147,3 +147,16 @@ if __name__ == "__main__":
 
     # Save Model
     save_model(best_model)
+
+
+# Get feature names after transformation
+num_feature_names = preprocessor.named_transformers_["num"].get_feature_names_out(selected_num_features)
+cat_feature_names = preprocessor.named_transformers_["cat"].get_feature_names_out(cat_features)
+
+# Combine all feature names after transformation
+all_feature_names = np.concatenate([num_feature_names, cat_feature_names])
+
+# Get selected feature names
+selected_feature_names = all_feature_names[important_indices]
+
+print("Selected Features for Training & Testing:\n", selected_feature_names)
