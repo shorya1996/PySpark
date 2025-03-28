@@ -1,0 +1,151 @@
+import pandas as pd
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+import joblib
+
+from sklearn.model_selection import train_test_split, StratifiedKFold, GridSearchCV
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.metrics import classification_report, roc_auc_score, confusion_matrix
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+import statsmodels.api as sm
+
+# Set random seed for reproducibility
+RANDOM_SEED = 42
+
+# ------------------ Step 1: Load Data ------------------
+def load_data(file_path):
+    """Loads the dataset from a CSV file."""
+    df = pd.read_csv(file_path)
+    return df
+
+# ------------------ Step 2: Data Preprocessing ------------------
+def preprocess_data(df):
+    """Preprocesses the data: handling missing values, encoding, and scaling."""
+    
+    # Drop transaction ID (not useful for modeling)
+    df.drop(columns=["transactionid"], inplace=True, errors='ignore')
+
+    # Define feature types
+    target = "FroInd"
+    num_features = df.select_dtypes(include=["int64", "float64"]).columns.tolist()
+    cat_features = df.select_dtypes(include=["object"]).columns.tolist()
+    bool_features = df.select_dtypes(include=["bool"]).columns.tolist()
+
+    # Remove target from feature lists
+    num_features.remove(target)
+
+    # Handle missing values
+    df.fillna(df.median(numeric_only=True), inplace=True)  # Fill missing numerics
+    df.fillna("Unknown", inplace=True)  # Fill missing categoricals
+
+    # Encoding categorical features
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ("num", StandardScaler(), num_features),
+            ("cat", OneHotEncoder(handle_unknown="ignore"), cat_features),
+        ],
+        remainder="passthrough",
+    )
+
+    return df, preprocessor, num_features, cat_features, bool_features, target
+
+# ------------------ Step 3: Remove Multicollinearity ------------------
+def remove_multicollinearity(df, num_features, threshold=5):
+    """Removes features with high multicollinearity using VIF."""
+    vif_data = pd.DataFrame()
+    vif_data["Feature"] = num_features
+    vif_data["VIF"] = [variance_inflation_factor(df[num_features].values, i) for i in range(len(num_features))]
+    
+    # Select features with low VIF
+    selected_features = vif_data[vif_data["VIF"] < threshold]["Feature"].tolist()
+    
+    return selected_features
+
+# ------------------ Step 4: Feature Selection (Statistical Significance) ------------------
+def select_significant_features(X, y, threshold=0.05):
+    """Selects statistically significant features using p-values from logistic regression."""
+    X = sm.add_constant(X)  # Add constant term
+    model = sm.Logit(y, X).fit(disp=0)  # Fit logistic model
+    significant_features = model.pvalues[model.pvalues < threshold].index.tolist()
+    
+    # Remove constant if present
+    if "const" in significant_features:
+        significant_features.remove("const")
+    
+    return significant_features
+
+# ------------------ Step 5: Train Logistic Regression Model ------------------
+def train_model(X_train, y_train, preprocessor):
+    """Trains a logistic regression model with hyperparameter tuning."""
+    
+    # Define pipeline
+    pipeline = Pipeline([
+        ("preprocessor", preprocessor),
+        ("classifier", LogisticRegression(class_weight="balanced", solver="liblinear"))
+    ])
+
+    # Hyperparameter tuning using GridSearchCV
+    param_grid = {"classifier__C": [0.01, 0.1, 1, 10]}
+    
+    grid_search = GridSearchCV(pipeline, param_grid, scoring="roc_auc", cv=5, n_jobs=-1)
+    grid_search.fit(X_train, y_train)
+
+    return grid_search.best_estimator_
+
+# ------------------ Step 6: Evaluate Model ------------------
+def evaluate_model(model, X_test, y_test):
+    """Evaluates model performance using ROC-AUC, confusion matrix, and classification report."""
+    y_pred = model.predict(X_test)
+    y_prob = model.predict_proba(X_test)[:, 1]
+
+    print("ROC-AUC Score:", roc_auc_score(y_test, y_prob))
+    print("\nClassification Report:\n", classification_report(y_test, y_pred))
+    
+    # Confusion Matrix
+    cm = confusion_matrix(y_test, y_pred)
+    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues")
+    plt.xlabel("Predicted")
+    plt.ylabel("Actual")
+    plt.title("Confusion Matrix")
+    plt.show()
+
+# ------------------ Step 7: Save Model ------------------
+def save_model(model, filename="fraud_detection_model.pkl"):
+    """Saves the trained model for production deployment."""
+    joblib.dump(model, filename)
+    print(f"Model saved as {filename}")
+
+# ------------------ Main Execution ------------------
+if __name__ == "__main__":
+    # Load Data
+    df = load_data("fraud_data.csv")  # Update with actual file path
+
+    # Preprocessing
+    df, preprocessor, num_features, cat_features, bool_features, target = preprocess_data(df)
+
+    # Multicollinearity Removal
+    selected_num_features = remove_multicollinearity(df, num_features)
+
+    # Feature Selection (Statistical Significance)
+    X = df[selected_num_features + cat_features]
+    y = df[target]
+    significant_features = select_significant_features(X, y)
+
+    # Final feature set
+    X = X[significant_features]
+
+    # Train-Test Split
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=RANDOM_SEED)
+
+    # Train Model
+    best_model = train_model(X_train, y_train, preprocessor)
+
+    # Evaluate Model
+    evaluate_model(best_model, X_test, y_test)
+
+    # Save Model
+    save_model(best_model)
