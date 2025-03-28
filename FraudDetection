@@ -4,14 +4,13 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import joblib
 
-from sklearn.model_selection import train_test_split, StratifiedKFold, GridSearchCV
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.metrics import classification_report, roc_auc_score, confusion_matrix
-from statsmodels.stats.outliers_influence import variance_inflation_factor
-import statsmodels.api as sm
+from sklearn.feature_selection import SelectFromModel
 
 # Set random seed for reproducibility
 RANDOM_SEED = 42
@@ -54,29 +53,29 @@ def preprocess_data(df):
     return df, preprocessor, num_features, cat_features, bool_features, target
 
 # ------------------ Step 3: Remove Multicollinearity ------------------
-def remove_multicollinearity(df, num_features, threshold=5):
-    """Removes features with high multicollinearity using VIF."""
-    vif_data = pd.DataFrame()
-    vif_data["Feature"] = num_features
-    vif_data["VIF"] = [variance_inflation_factor(df[num_features].values, i) for i in range(len(num_features))]
+def remove_multicollinearity(df, num_features, threshold=0.8):
+    """Removes features with high correlation to avoid multicollinearity."""
+    corr_matrix = df[num_features].corr().abs()
+    upper_triangle = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
+
+    # Find highly correlated features
+    to_drop = [column for column in upper_triangle.columns if any(upper_triangle[column] > threshold)]
     
-    # Select features with low VIF
-    selected_features = vif_data[vif_data["VIF"] < threshold]["Feature"].tolist()
+    selected_features = [col for col in num_features if col not in to_drop]
     
     return selected_features
 
-# ------------------ Step 4: Feature Selection (Statistical Significance) ------------------
-def select_significant_features(X, y, threshold=0.05):
-    """Selects statistically significant features using p-values from logistic regression."""
-    X = sm.add_constant(X)  # Add constant term
-    model = sm.Logit(y, X).fit(disp=0)  # Fit logistic model
-    significant_features = model.pvalues[model.pvalues < threshold].index.tolist()
+# ------------------ Step 4: Feature Selection (Using Logistic Regression) ------------------
+def select_important_features(X_train, y_train):
+    """Selects important features using logistic regression with L1 regularization."""
     
-    # Remove constant if present
-    if "const" in significant_features:
-        significant_features.remove("const")
+    model = LogisticRegression(penalty="l1", solver="liblinear", class_weight="balanced")
+    model.fit(X_train, y_train)
     
-    return significant_features
+    selector = SelectFromModel(model, prefit=True)  # Automatically selects non-zero coefficients
+    selected_features = X_train.columns[selector.get_support()].tolist()
+    
+    return selected_features
 
 # ------------------ Step 5: Train Logistic Regression Model ------------------
 def train_model(X_train, y_train, preprocessor):
@@ -130,16 +129,14 @@ if __name__ == "__main__":
     # Multicollinearity Removal
     selected_num_features = remove_multicollinearity(df, num_features)
 
-    # Feature Selection (Statistical Significance)
+    # Train-Test Split
     X = df[selected_num_features + cat_features]
     y = df[target]
-    significant_features = select_significant_features(X, y)
-
-    # Final feature set
-    X = X[significant_features]
-
-    # Train-Test Split
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=RANDOM_SEED)
+
+    # Feature Selection
+    important_features = select_important_features(X_train, y_train)
+    X_train, X_test = X_train[important_features], X_test[important_features]
 
     # Train Model
     best_model = train_model(X_train, y_train, preprocessor)
