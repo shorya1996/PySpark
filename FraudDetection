@@ -22,19 +22,11 @@ def load_data(file_path):
     return df
 
 # ------------------ Step 2: Data Preprocessing ------------------
-def preprocess_data(df):
+def preprocess_data(df, selected_num_features, cat_features):
     """Preprocesses the data: handling missing values, encoding, and scaling."""
     
     # Drop transaction ID (not useful for modeling)
     df.drop(columns=["transactionid"], inplace=True, errors='ignore')
-
-    # Define feature types
-    target = "FroInd"
-    num_features = df.select_dtypes(include=["int64", "float64"]).columns.tolist()
-    cat_features = df.select_dtypes(include=["object"]).columns.tolist()
-
-    # Remove target from feature lists
-    num_features.remove(target)
 
     # Handle missing values
     df.fillna(df.median(numeric_only=True), inplace=True)  # Fill missing numerics
@@ -43,12 +35,12 @@ def preprocess_data(df):
     # Encoding categorical features & scaling numerical features
     preprocessor = ColumnTransformer(
         transformers=[
-            ("num", StandardScaler(), num_features),
+            ("num", StandardScaler(), selected_num_features),
             ("cat", OneHotEncoder(handle_unknown="ignore", sparse_output=False), cat_features),
         ]
     )
 
-    return df, preprocessor, num_features, cat_features, target
+    return df, preprocessor
 
 # ------------------ Step 3: Remove Multicollinearity ------------------
 def remove_multicollinearity(df, num_features, threshold=0.8):
@@ -119,11 +111,17 @@ if __name__ == "__main__":
     # Load Data
     df = load_data("fraud_data.csv")  # Update with actual file path
 
-    # Preprocessing
-    df, preprocessor, num_features, cat_features, target = preprocess_data(df)
+    # Define feature types
+    target = "FroInd"
+    num_features = df.select_dtypes(include=["int64", "float64"]).columns.tolist()
+    cat_features = df.select_dtypes(include=["object"]).columns.tolist()
+    num_features.remove(target)  # Remove target from numeric features
 
-    # Multicollinearity Removal
+    # Remove highly correlated numeric features
     selected_num_features = remove_multicollinearity(df, num_features)
+
+    # Preprocessing (Now uses updated `selected_num_features`)
+    df, preprocessor = preprocess_data(df, selected_num_features, cat_features)
 
     # Train-Test Split
     X = df[selected_num_features + cat_features]
