@@ -32,7 +32,6 @@ def preprocess_data(df):
     target = "FroInd"
     num_features = df.select_dtypes(include=["int64", "float64"]).columns.tolist()
     cat_features = df.select_dtypes(include=["object"]).columns.tolist()
-    bool_features = df.select_dtypes(include=["bool"]).columns.tolist()
 
     # Remove target from feature lists
     num_features.remove(target)
@@ -41,16 +40,15 @@ def preprocess_data(df):
     df.fillna(df.median(numeric_only=True), inplace=True)  # Fill missing numerics
     df.fillna("Unknown", inplace=True)  # Fill missing categoricals
 
-    # Encoding categorical features
+    # Encoding categorical features & scaling numerical features
     preprocessor = ColumnTransformer(
         transformers=[
             ("num", StandardScaler(), num_features),
-            ("cat", OneHotEncoder(handle_unknown="ignore"), cat_features),
-        ],
-        remainder="passthrough",
+            ("cat", OneHotEncoder(handle_unknown="ignore", sparse_output=False), cat_features),
+        ]
     )
 
-    return df, preprocessor, num_features, cat_features, bool_features, target
+    return df, preprocessor, num_features, cat_features, target
 
 # ------------------ Step 3: Remove Multicollinearity ------------------
 def remove_multicollinearity(df, num_features, threshold=0.8):
@@ -65,32 +63,30 @@ def remove_multicollinearity(df, num_features, threshold=0.8):
     
     return selected_features
 
-# ------------------ Step 4: Feature Selection (Using Logistic Regression) ------------------
-def select_important_features(X_train, y_train):
+# ------------------ Step 4: Feature Selection (After Preprocessing) ------------------
+def select_important_features(X_train_transformed, y_train):
     """Selects important features using logistic regression with L1 regularization."""
     
-    model = LogisticRegression(penalty="l1", solver="liblinear", class_weight="balanced")
-    model.fit(X_train, y_train)
+    # Train logistic regression on transformed data
+    model = LogisticRegression(penalty="l1", solver="liblinear", class_weight="balanced", max_iter=200)
+    model.fit(X_train_transformed, y_train)
     
-    selector = SelectFromModel(model, prefit=True)  # Automatically selects non-zero coefficients
-    selected_features = X_train.columns[selector.get_support()].tolist()
-    
-    return selected_features
+    # Select important features
+    selector = SelectFromModel(model, prefit=True)
+    selected_indices = selector.get_support(indices=True)
+
+    return selected_indices  # Returning indices instead of names (since data is transformed)
 
 # ------------------ Step 5: Train Logistic Regression Model ------------------
-def train_model(X_train, y_train, preprocessor):
+def train_model(X_train, y_train):
     """Trains a logistic regression model with hyperparameter tuning."""
     
-    # Define pipeline
-    pipeline = Pipeline([
-        ("preprocessor", preprocessor),
-        ("classifier", LogisticRegression(class_weight="balanced", solver="liblinear"))
-    ])
+    model = LogisticRegression(class_weight="balanced", solver="liblinear", max_iter=200)
 
     # Hyperparameter tuning using GridSearchCV
-    param_grid = {"classifier__C": [0.01, 0.1, 1, 10]}
+    param_grid = {"C": [0.01, 0.1, 1, 10]}
     
-    grid_search = GridSearchCV(pipeline, param_grid, scoring="roc_auc", cv=5, n_jobs=-1)
+    grid_search = GridSearchCV(model, param_grid, scoring="roc_auc", cv=5, n_jobs=-1)
     grid_search.fit(X_train, y_train)
 
     return grid_search.best_estimator_
@@ -124,7 +120,7 @@ if __name__ == "__main__":
     df = load_data("fraud_data.csv")  # Update with actual file path
 
     # Preprocessing
-    df, preprocessor, num_features, cat_features, bool_features, target = preprocess_data(df)
+    df, preprocessor, num_features, cat_features, target = preprocess_data(df)
 
     # Multicollinearity Removal
     selected_num_features = remove_multicollinearity(df, num_features)
@@ -134,15 +130,22 @@ if __name__ == "__main__":
     y = df[target]
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=RANDOM_SEED)
 
-    # Feature Selection
-    important_features = select_important_features(X_train, y_train)
-    X_train, X_test = X_train[important_features], X_test[important_features]
+    # Apply preprocessing to training data
+    X_train_transformed = preprocessor.fit_transform(X_train)
+    X_test_transformed = preprocessor.transform(X_test)
+
+    # Feature Selection (after transformation)
+    important_indices = select_important_features(X_train_transformed, y_train)
+
+    # Select only important features
+    X_train_selected = X_train_transformed[:, important_indices]
+    X_test_selected = X_test_transformed[:, important_indices]
 
     # Train Model
-    best_model = train_model(X_train, y_train, preprocessor)
+    best_model = train_model(X_train_selected, y_train)
 
     # Evaluate Model
-    evaluate_model(best_model, X_test, y_test)
+    evaluate_model(best_model, X_test_selected, y_test)
 
     # Save Model
     save_model(best_model)
