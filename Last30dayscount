@@ -1,0 +1,22 @@
+-- Step 1: Get the latest transaction date from the table
+WITH latest_date AS (
+  SELECT MAX(transaction_date) AS max_date
+  FROM debit_table
+),
+
+-- Step 2: Filter to policy declines within 30 days of the latest date
+policy_declines_30d AS (
+  SELECT 
+    account_number
+  FROM debit_table
+  WHERE decision = 'policy decline'
+    AND transaction_date BETWEEN date_sub((SELECT max_date FROM latest_date), 30) 
+                             AND (SELECT max_date FROM latest_date)
+)
+
+-- Step 3: Count policy declines per account
+SELECT 
+  account_number,
+  COUNT(*) AS policy_decline_count_30d
+FROM policy_declines_30d
+GROUP BY account_number;
