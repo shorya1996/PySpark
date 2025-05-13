@@ -15,15 +15,24 @@ max_txn_date AS (
   GROUP BY account_number
 ),
 
-window_counts AS (
+joined_data AS (
   SELECT 
     b.account_number,
-    COUNT(CASE WHEN datediff(m.latest_txn_date, b.transaction_date) BETWEEN 0 AND 6 THEN 1 END) AS policy_declines_7d,
-    COUNT(CASE WHEN datediff(m.latest_txn_date, b.transaction_date) BETWEEN 0 AND 29 THEN 1 END) AS policy_declines_30d
+    b.transaction_date,
+    m.latest_txn_date,
+    datediff(m.latest_txn_date, b.transaction_date) AS days_diff
   FROM base_data b
   JOIN max_txn_date m
     ON b.account_number = m.account_number
-  GROUP BY b.account_number, m.latest_txn_date
+),
+
+window_counts AS (
+  SELECT 
+    account_number,
+    COUNT(CASE WHEN days_diff BETWEEN 0 AND 6 THEN 1 END) AS policy_declines_7d,
+    COUNT(CASE WHEN days_diff BETWEEN 0 AND 29 THEN 1 END) AS policy_declines_30d
+  FROM joined_data
+  GROUP BY account_number
 )
 
 SELECT *,
