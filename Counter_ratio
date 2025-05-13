@@ -1,0 +1,34 @@
+WITH base_data AS (
+  SELECT 
+    account_number,
+    transaction_date,
+    decision
+  FROM your_table
+  WHERE decision = 'policy decline'
+),
+
+max_txn_date AS (
+  SELECT 
+    account_number,
+    MAX(transaction_date) AS latest_txn_date
+  FROM base_data
+  GROUP BY account_number
+),
+
+window_counts AS (
+  SELECT 
+    b.account_number,
+    COUNT(CASE WHEN datediff(m.latest_txn_date, b.transaction_date) BETWEEN 0 AND 6 THEN 1 END) AS policy_declines_7d,
+    COUNT(CASE WHEN datediff(m.latest_txn_date, b.transaction_date) BETWEEN 0 AND 29 THEN 1 END) AS policy_declines_30d
+  FROM base_data b
+  JOIN max_txn_date m
+    ON b.account_number = m.account_number
+  GROUP BY b.account_number, m.latest_txn_date
+)
+
+SELECT *,
+       CASE 
+         WHEN policy_declines_30d = 0 THEN 0
+         ELSE ROUND(policy_declines_7d * 1.0 / policy_declines_30d, 2)
+       END AS ratio_7d_to_30d
+FROM window_counts;
