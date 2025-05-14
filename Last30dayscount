@@ -1,40 +1,60 @@
--- Step 1: Join transactions with claims based on account_number
-WITH joined_data AS (
+-- Step 1: Get latest claim per account in April
+WITH latest_claim AS (
+  SELECT *
+  FROM (
+    SELECT *,
+           ROW_NUMBER() OVER (PARTITION BY account_number ORDER BY claim_entry_date DESC) AS rn
+    FROM claims
+    WHERE claim_entry_date BETWEEN DATE '2025-04-01' AND DATE '2025-04-30'
+  ) c
+  WHERE rn = 1
+),
+
+-- Step 2: Get 30-day and 7-day historical policy declines before latest claim
+policy_decline_counts AS (
   SELECT
-    c.account_number,
+    t.account_number,
     c.claim_entry_date,
-    t.txn_date,
-    t.decision
-  FROM claims c
-  LEFT JOIN transactions t
-    ON c.account_number = t.account_number
-   AND t.txn_date BETWEEN DATE_SUB(c.claim_entry_date, 30) AND DATE_SUB(c.claim_entry_date, 1)
+    
+    COUNT(CASE WHEN t.transaction_date BETWEEN DATE_SUB(c.claim_entry_date, 30) AND DATE_SUB(c.claim_entry_date, 1)
+               AND decision = 'Policy Decline' THEN 1 END) AS cnt_30d,
+    
+    COUNT(CASE WHEN t.transaction_date BETWEEN DATE_SUB(c.claim_entry_date, 7) AND DATE_SUB(c.claim_entry_date, 1)
+               AND decision = 'Policy Decline' THEN 1 END) AS cnt_7d
+
+  FROM transactions t
+  JOIN latest_claim c
+    ON t.account_number = c.account_number
+  WHERE t.transaction_date BETWEEN DATE '2025-03-01' AND DATE '2025-04-30'
+  GROUP BY t.account_number, c.claim_entry_date
 ),
 
--- Step 2: Add flags for windows and decisions
-flagged_data AS (
+-- Step 3: Create escalation ratio and flag high-risk accounts
+escalation_flags AS (
   SELECT *,
-    CASE WHEN txn_date >= DATE_SUB(claim_entry_date, 7) THEN 1 ELSE 0 END AS in_7d,
-    CASE WHEN decision = 'policy_decline' THEN 1 ELSE 0 END AS is_policy_decline
-  FROM joined_data
+         CASE 
+           WHEN cnt_30d > 0 THEN CAST(cnt_7d AS DOUBLE) / cnt_30d 
+           ELSE NULL 
+         END AS escalation_ratio,
+
+         CASE 
+           WHEN cnt_30d > 200 AND cnt_7d < 3 AND (CAST(cnt_7d AS DOUBLE) / cnt_30d) < 0.05 THEN 1
+           ELSE 0
+         END AS high_risk_flag
+  FROM policy_decline_counts
 ),
 
--- Step 3: Aggregate counts per window
-aggregated AS (
+-- Step 4: Apply flag to all transactions
+final_output AS (
   SELECT
-    account_number,
-    claim_entry_date,
-    COUNT(*) AS txns_30d,
-    SUM(is_policy_decline) AS policy_30d,
-    SUM(CASE WHEN in_7d = 1 THEN 1 ELSE 0 END) AS txns_7d,
-    SUM(CASE WHEN in_7d = 1 AND is_policy_decline = 1 THEN 1 ELSE 0 END) AS policy_7d
-  FROM flagged_data
-  GROUP BY account_number, claim_entry_date
+    t.*,
+    e.high_risk_flag
+  FROM transactions t
+  LEFT JOIN escalation_flags e
+    ON t.account_number = e.account_number
+  WHERE t.transaction_date BETWEEN DATE '2025-03-01' AND DATE '2025-04-30'
 )
 
--- Step 4: Compute ratios
-SELECT *,
-  policy_30d * 1.0 / txns_30d AS policy_ratio_30d,
-  policy_7d * 1.0 / txns_7d AS policy_ratio_7d,
-  (policy_7d * 1.0 / txns_7d) / (policy_30d * 1.0 / txns_30d) AS escalation_ratio
-FROM aggregated;
+-- Final result
+SELECT *
+FROM final_output;
