@@ -1,22 +1,40 @@
--- Step 1: Get the latest transaction date from the table
-WITH latest_date AS (
-  SELECT MAX(transaction_date) AS max_date
-  FROM debit_table
+-- Step 1: Join transactions with claims based on account_number
+WITH joined_data AS (
+  SELECT
+    c.account_number,
+    c.claim_entry_date,
+    t.txn_date,
+    t.decision
+  FROM claims c
+  LEFT JOIN transactions t
+    ON c.account_number = t.account_number
+   AND t.txn_date BETWEEN DATE_SUB(c.claim_entry_date, 30) AND DATE_SUB(c.claim_entry_date, 1)
 ),
 
--- Step 2: Filter to policy declines within 30 days of the latest date
-policy_declines_30d AS (
-  SELECT 
-    account_number
-  FROM debit_table
-  WHERE decision = 'policy decline'
-    AND transaction_date BETWEEN date_sub((SELECT max_date FROM latest_date), 30) 
-                             AND (SELECT max_date FROM latest_date)
+-- Step 2: Add flags for windows and decisions
+flagged_data AS (
+  SELECT *,
+    CASE WHEN txn_date >= DATE_SUB(claim_entry_date, 7) THEN 1 ELSE 0 END AS in_7d,
+    CASE WHEN decision = 'policy_decline' THEN 1 ELSE 0 END AS is_policy_decline
+  FROM joined_data
+),
+
+-- Step 3: Aggregate counts per window
+aggregated AS (
+  SELECT
+    account_number,
+    claim_entry_date,
+    COUNT(*) AS txns_30d,
+    SUM(is_policy_decline) AS policy_30d,
+    SUM(CASE WHEN in_7d = 1 THEN 1 ELSE 0 END) AS txns_7d,
+    SUM(CASE WHEN in_7d = 1 AND is_policy_decline = 1 THEN 1 ELSE 0 END) AS policy_7d
+  FROM flagged_data
+  GROUP BY account_number, claim_entry_date
 )
 
--- Step 3: Count policy declines per account
-SELECT 
-  account_number,
-  COUNT(*) AS policy_decline_count_30d
-FROM policy_declines_30d
-GROUP BY account_number;
+-- Step 4: Compute ratios
+SELECT *,
+  policy_30d * 1.0 / txns_30d AS policy_ratio_30d,
+  policy_7d * 1.0 / txns_7d AS policy_ratio_7d,
+  (policy_7d * 1.0 / txns_7d) / (policy_30d * 1.0 / txns_30d) AS escalation_ratio
+FROM aggregated;
